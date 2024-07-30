@@ -8,8 +8,8 @@ local Class = require("class")
 ---@field private _deps Watcher[] 原依赖关系，即上一次该 watcher 对应属性依赖的 watchers
 ---@field private _newDeps Watcher[] 新依赖关系，即当前该 watcher 对应属性依赖的 watchers
 ---@field private _subs Watcher[] 订阅者, 即依赖该 watcher 对应属性的 watchers
----@field private _lazy boolean 是否懒执行
----@field private _staticDeps boolean 是否依赖关系固定
+---@field private _lazy boolean 是否懒执行，仅计算属性有效，默认 true
+---@field private _staticDeps boolean 是否依赖关系固定，若固定，则仅会收集一次依赖，后续依赖不再更新；默认 true
 ---@field private _dirty boolean 是否脏数据
 ---@field private _getter function 获取值的函数, 仅计算属性需要
 ---@field private _vm table 实例对象
@@ -59,9 +59,11 @@ function _Watcher:Init(userDef, vm, name)
         self._getter = userDef
     elseif type(userDef) == "table" then
         self._getter = userDef.get
-        self._lazy = userDef.lazy == nil or userDef.lazy -- 默认懒执行
+        self._lazy = userDef.lazy == nil or userDef.lazy                   -- 默认懒执行
+        self._staticDeps = userDef.staticDeps == nil or userDef.staticDeps -- 默认固定依赖关系
     end
     self._dirty = true
+    self._collected = false -- 是否已收集依赖
     self._vm = vm
 end
 
@@ -136,7 +138,7 @@ end
 function _Watcher:Notify()
     pprint(string.format("   * <Watcher: %s> notify subs ...", self.name))
     for _, subWatcher in ipairs(self._subs) do
-        if subWatcher.Update then
+        if subWatcher.Update and subWatcher ~= self then -- 避免循环依赖
             pprint(string.format("     - <Watcher: %s> update", subWatcher.name))
             subWatcher:Update()
         end
@@ -168,6 +170,7 @@ function _Watcher:Get()
         local value = self._getter(self._vm) -- 计算新值 & 收集依赖
         self:popTarget()
         self:cleanupDeps()
+        self._collected = true -- 到这一步，依赖已经收集到 self._deps 中
         self._value = value
     end
     return self._value
@@ -207,28 +210,45 @@ end
 ---                                    private methods                                     ---
 --- ====================================================================================== ---
 
-function _Watcher:pushTarget()
-    if self._deps and #self._deps > 0 then -- 旧依赖关系
+
+function _Watcher:removeOldSubs()
+    pprint(string.format("   * <Watcher: %s> remove old subs", self.name))
+    if self._deps and #self._deps > 0 then
         for i, depWatcher in ipairs(self._deps) do
             depWatcher:RemoveSub(self)
         end
     end
-    pushWatcher(self)
-    pprint(string.format("   * <Watcher: %s> set as active watcher", self.name))
+end
+
+function _Watcher:pushTarget()
+    if not self._staticDeps or not self._collected then -- 非固定依赖关系，或者未收集依赖
+        self:removeOldSubs()
+        pushWatcher(self)
+        pprint(string.format("   * <Watcher: %s> set as active watcher", self.name))
+    else
+        pprint(string.format("   * <Watcher: %s> deps are static, no need to set as active watcher, cureent deps:",
+            self.name))
+        for i, depWatcher in ipairs(self._deps) do
+            pprint(string.format("    -  <Watcher: %s>", depWatcher.name))
+        end
+    end
 end
 
 function _Watcher:popTarget()
-    pprint(string.format("   * <Watcher: %s> remove active watcher", self.name))
-    popWatcher()
+    if not self._staticDeps or not self._collected then
+        pprint(string.format("   * <Watcher: %s> remove active watcher", self.name))
+        popWatcher()
+    end
 end
 
 function _Watcher:cleanupDeps()
     pprint(string.format("   * <Watcher: %s> cleanup deps", self.name))
+    if not self._staticDeps or not self._collected then
+        self._deps, self._newDeps = self._newDeps, self._deps
 
-    self._deps, self._newDeps = self._newDeps, self._deps
-
-    for dep in pairs(self._newDeps) do
-        self._newDeps[dep] = nil
+        for dep in pairs(self._newDeps) do
+            self._newDeps[dep] = nil
+        end
     end
 
     self._dirty = false

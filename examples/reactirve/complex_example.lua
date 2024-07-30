@@ -85,7 +85,8 @@ local Character = Class(Creature, function(self, name, health, attack, defense, 
                 total = total + item:GetterAttackBonus()
             end
             return total
-        end
+        end,
+        staticDeps = false
     })
     self:AddComputedField("totalDefense", {
         get = function(self)
@@ -94,7 +95,8 @@ local Character = Class(Creature, function(self, name, health, attack, defense, 
                 total = total + item:GetterDefenseBonus()
             end
             return total
-        end
+        end,
+        staticDeps = false
     })
     -- 战力：攻击力 + 防御力
     self:AddComputedField("power", {
@@ -196,11 +198,17 @@ local GameSystem = {
     ---@param char2 Character
     SimulateBattle = function(self, char1, char2)
         pprint("\nBattle starts between " .. char1:GetterName() .. " and " .. char2:GetterName())
+        local round = 1
         while char1:GetterCurrentHealth() > 0 and char2:GetterCurrentHealth() > 0 do
             char2:TakeDamage(char1:GetterTotalAttack())
             if char2:GetterCurrentHealth() > 0 then
                 char1:TakeDamage(char2:GetterTotalAttack())
             end
+
+            print(string.format("- Round %d, %s's status: %s, %s's status: %s", round, char1:GetterName(),
+                char1:GetterStatus(),
+                char2:GetterName(), char2:GetterStatus()))
+            round = round + 1
         end
         local winner = char1:GetterCurrentHealth() > 0 and char1 or char2
         pprint("Battle ends. " .. winner:GetterName() .. " wins!")
@@ -249,3 +257,6 @@ print("== Hero's power after attack increase:", hero:GetterPower())
 
 hero:StopObserve()
 enemy:StopObserve()
+sword:StopObserve()
+shield:StopObserve()
+potion:StopObserve()
