@@ -96,12 +96,18 @@ local Character = Class(Creature, function(self, name, health, attack, defense, 
             return total
         end
     })
+    -- 战力：攻击力 + 防御力
+    self:AddComputedField("power", {
+        get = function(self)
+            return self:GetterTotalAttack() + self:GetterTotalDefense()
+        end
+    })
 end)
 
 function Character:Equip(item)
     local equipment = self:GetterEquipment()
     table.insert(equipment, item)
-    self:SetterEquipment(equipment)
+    self:SetterEquipment(equipment) -- 通知依赖该属性的 watcher 更新
 end
 
 function Character:GainExperience(amount)
@@ -215,18 +221,31 @@ GameSystem:AddCharacter(hero)
 GameSystem:AddCharacter(enemy)
 
 -- 模拟游戏流程
-pprint("Initial state:")
-pprint(string.format("%s - Health: %d, Attack: %d, Defense: %d",
-    hero:GetterName(), hero:GetterCurrentHealth(), hero:GetterTotalAttack(), hero:GetterTotalDefense()))
+print("Initial state:")
+print(
+    string.format("%s - Health: %d, Attack: %d, Defense: %d, Power: %d", hero:GetterName(), hero:GetterCurrentHealth(),
+        hero:GetterTotalAttack(), hero:GetterTotalDefense(), hero:GetterPower()))
 
 hero:Equip(sword)
 hero:Equip(shield)
 hero:AddEffect(potion)
 
-pprint("\nAfter equipping items and using potion:")
-pprint(string.format("%s - Health: %d, Attack: %d, Defense: %d",
-    hero:GetterName(), hero:GetterCurrentHealth(), hero:GetterTotalAttack(), hero:GetterTotalDefense()))
+print("\nAfter equipping items and using potion:")
+print(string.format("%s - Health: %d, Attack: %d, Defense: %d, Power: %d", hero:GetterName(), hero:GetterCurrentHealth(),
+    hero:GetterTotalAttack(), hero:GetterTotalDefense(), hero:GetterPower()))
 
 hero:SetterPosition({ x = 10, y = 20 })
 
 GameSystem:SimulateBattle(hero, enemy)
+
+print("Hero's power after battle:", hero:GetterPower())
+
+hero:SetterAttack(30)
+
+print("== Hero's power after attack increase:", hero:GetterPower())
+
+print("== Hero's power after attack increase:", hero:GetterPower())
+
+
+hero:StopObserve()
+enemy:StopObserve()
